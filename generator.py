@@ -63,20 +63,6 @@ def get_random_augment(x,params):
       x = flip_axis(x, img_row_axis)
   return x
 
-def generate_classdict(label):
-  counter = Counter(label)
-  class_num=len(counter)
-  class_list=list(counter.keys()) #?
-  class_dict={}
-  class_weight={}
-  total = len(label)
-  count=0
-  for name,num in counter.items():
-    class_dict[name]=count
-    class_weight[count]=(total/(num*class_num))
-    count+=1
-  return class_num,class_list,class_dict,class_weight
-
 def generate_classdict2(list):
     label=list(itertools.chain(*list))
     generate_classdict(label)
@@ -84,66 +70,59 @@ def generate_classdict2(list):
 class CustomDataGen(tf.keras.utils.Sequence):
     
     def __init__(self, df, 
-                 batch_size,is_train=False,path='./images/',
+                 batch_size,label_map,is_train=False,path='./images/',
                  input_size=(224, 224, 3),
                  shuffle=True):
         
         self.df = df.copy()
+        self.i=0
         # self.X_col = X_col
         # self.y_col = y_col
         self.batch_size = batch_size
         self.input_size = input_size
         self.shuffle = shuffle
         self.path = path
+        self.label_map = label_map
         self.horizontal_flip=True
         self.vertical_flip=True
         self.augment_painting=False
         self.is_train=is_train
         
         self.n = len(self.df)
-        self.Artist_class_num,self.Artist_class_list,self.Artist_class_dict,self.Artist_class_weight=generate_classdict(np.array(df['Artist'].tolist()) )
-        self.Style_class_num,self.Style_class_list,self.Style_class_dict,self.Style_class_weight=generate_classdict(np.array(df['Style'].tolist()))
-        self.Objtype_class_num,self.Objtype_class_list,self.Objtype_class_dict,self.Objtype_class_weight=generate_classdict(np.array(df['Object Type'].tolist()) )
-        self.CreationDate_class_num, self.CreationDate_class_list,self.CreationDate_class_dict,self.CreationDate_class_weight=generate_classdict(np.array(dataset['Creation Date'].tolist()))
-        # self.n_name = df[y_col['name']].nunique()
-        # self.n_type = df[y_col['type']].nunique()
-        # self.on_epoch_end()
+            
+    def __call__(self):
+        while True:
+            indexes = self.__get_exploration_order()
+            itr_num = int(np.ceil((len(indexes) // (self.batch_size))))
+
+            for i in range(itr_num):
+                if (i+1)*self.batch_size<=self.n:
+                    batch_ids = indexes[i*self.batch_size:(i+1)*self.batch_size]
+                else:
+                    batch_ids = indexes[i*self.batch_size:]
+                # batch_ids = indexes[i * self.batch_size :(i + 1) * self.batch_size]
+                X, y = self.__data_generation(batch_ids)
+
+                yield X, y
     
-    def on_epoch_end(self):
-        self.indexes = np.arange(len(self.df))
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
+    def __get_exploration_order(self):
+        indexes = np.arange(self.n)
+
+        if self.shuffle:
+            np.random.shuffle(indexes)
+
+        return indexes
     
-    def __getitem__(self, index):
+    def __data_generation(self,batch_ids):
 
-        if (index+1)*self.batch_size<=self.n:
-            indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-            num=self.batch_size
-        else:
-            indexes = self.indexes[index*self.batch_size:]
-            num = self.n - index*self.batch_size
-
-        # Find list of IDs
-        list_IDs_temp = [self.list_IDs[k] for k in indexes]
-
-        # Generate data
-        X, y = self.__data_generation(list_IDs_temp,num)
-
-        return X, y
-    
-    def __len__(self):
-        return self.n // self.batch_size
-
-    def __data_generation(self,list_IDs_temp,num):
-
-        x_array=np.zeros((num,self.input_size[0],self.input_size[1]))
+        x_array=np.zeros((len(batch_ids),self.input_size[0],self.input_size[1]))
         y1_array=[]
         y2_array=[]
         y3_array=[]
         y4_array=[]
         count=0
 
-        for i in list_IDs_temp:
+        for i in batch_ids:
             if self.is_train:
                 flip_horizontal = (np.random.random() < 0.5) * self.horizontal_flip
                 flip_vertical = (np.random.random() > 0.5) * self.vertical_flip
@@ -157,10 +136,10 @@ class CustomDataGen(tf.keras.utils.Sequence):
             if self.is_train:
                 img=get_random_augment(img,params)
             x_array[count]=img
-            y1_array.append(to_categorical(self.Artist_class_dict[self.df[i]['Artist']],num_classes=self.Artist_class_num))
-            y2_array.append(to_categorical(self.Style_class_dict[self.df[i]['Style']],num_classes=self.Style_class_num))
-            y3_array.append(to_categorical(self.Objtype_class_dict[self.df[i]['Object Type']],num_classes=self.Objtype_class_num))
-            y4_array.append(to_categorical(self.CreationDate_class_dict[self.df[i]['Creation Date']],num_classes=self.CreationDate_class_num))
+            y1_array.append(to_categorical(self.label_map["Artist_class_dict"][self.df.loc[i]['Artist']],num_classes=self.label_map["Artist_class_num"]))
+            y2_array.append(to_categorical(self.label_map["Style_class_dict"][self.df.loc[i]['Style']],num_classes=self.label_map["Style_class_num"]))
+            y3_array.append(to_categorical(self.label_map["Objtype_class_dict"][self.df.loc[i]['Object Type']],num_classes=self.label_map["Objtype_class_num"]))
+            y4_array.append(to_categorical(self.label_map["CreationDate_class_dict"][self.df.loc[i]['Creation Date']],num_classes=self.label_map["CreationDate_class_num"]))
             count+=1
         return x_array,{'Artist_output':y1_array,'Style_output':y2_array,'Objtype_output':y3_array,'CreationDate_output':y4_array}
 

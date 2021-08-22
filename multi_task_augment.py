@@ -22,9 +22,16 @@ import numpy as np
 from collections import Counter
 from sklearn.model_selection import StratifiedShuffleSplit
 
-
 X=np.array(dataset['imagefile'].tolist())
+y=np.array(dataset['Style'].tolist())
+Style_class_num,Style_class_list,Style_class_dict,Style_class_weight=generate_classdict(y)
+y=np.array(dataset['Object Type'].tolist()) 
+Objtype_class_num,Objtype_class_list,Objtype_class_dict,Objtype_class_weight=generate_classdict(y)
+y=np.array(dataset['Creation Date'].tolist()) 
+CreationDate_class_num,CreationDate_class_list,CreationDate_class_dict,CreationDate_class_weight=generate_classdict(y)
 y1=np.array(dataset['Artist'].tolist()) 
+Artist_class_num,Artist_class_list,Artist_class_dict,Artist_class_weight=generate_classdict(y)
+
 sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
 print(sss.get_n_splits(X, y1))
 train_frame=pd.DataFrame()
@@ -33,6 +40,9 @@ for train_index, test_index in sss.split(X, y1):
   train_frame=dataset.loc[train_index]
   test_frame=dataset.loc[test_index]
 
+train_frame=train_frame.reset_index()
+test_frame=test_frame.reset_index()
+
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.utils import to_categorical
 import tensorflow as tf
@@ -40,12 +50,7 @@ import numpy as np
 path='./images/'
 train_input_shape = (224,224)
 batch_size=64
-imgs_size=(64,224,224,3)
-
-Artist_class_num = len(Counter(np.array(dataset['Artist'].tolist())))
-Style_class_num = len(Counter(np.array(dataset['Style'].tolist())))
-Objtype_class_num = len(Counter(np.array(dataset['Object Type'].tolist())))
-CreationDate_class_num = len(Counter(np.array(dataset['Creation Date'].tolist())))
+imgs_size=(64,224,224,3
 
 
 Artist_size=(batch_size,Artist_class_num)
@@ -53,14 +58,23 @@ Style_size=(batch_size,Style_class_num)
 Objtype_size=(batch_size,Objtype_class_num)
 CreationDate_size=(batch_size,CreationDate_class_num)
 
-
+label_map={
+  "Artist_class_num":Artist_class_num,
+  "Style_class_num":Style_class_num,
+  "Objtype_class_num":Objtype_class_num,
+  "CreationDate_class_num":CreationDate_class_num,
+  "Artist_class_dict":Artist_class_dict,
+  "Style_class_dict":Style_class_dict,
+  "Objtype_class_dict":Objtype_class_dict,
+  "CreationDate_class_dict":CreationDate_class_dict
+}
 
 train_generator = tf.data.Dataset.from_generator(
-     CustomDataGen(train_frame,batch_size,is_train=True),
+     CustomDataGen(train_frame,batch_size,label_map,is_train=True,path=path),
      (tf.float64, {'Artist_output':tf.float32,'Style_output':tf.float32,'Objtype_output':tf.float32,'CreationDate_output':tf.float32}),
      (imgs_size, {'Artist_output':Artist_size,'Style_output':Style_size,'Objtype_output':Objtype_size,'CreationDate_output':CreationDate_size}))
 valid_generator = tf.data.Dataset.from_generator(
-     CustomDataGen(test_frame,batch_size,is_train=False),
+     CustomDataGen(test_frame,batch_size,label_map,is_train=False,path=path),
      (tf.float64, {'Artist_output':tf.float32,'Style_output':tf.float32,'Objtype_output':tf.float32,'CreationDate_output':tf.float32}),
      (imgs_size, {'Artist_output':Artist_size,'Style_output':Style_size,'Objtype_output':Objtype_size,'CreationDate_output':CreationDate_size}))
 #tf.TensorShape
@@ -97,7 +111,7 @@ output3 = Dense(Objtype_class_num, activation='softmax',name='Objtype_output')(X
 #model = Model(inputs=based_model.input, outputs=[output1,output2,output3])
 output4 = Dense(CreationDate_class_num, activation='sigmoid',name='CreationDate_output')(X)
 model = Model(inputs=based_model.input, outputs=[output1,output2,output3,output4])
-optimizer = Adam(lr=1e-4)
+optimizer = Adam(learning_rate=1e-4)
 model.compile(loss={'Artist_output': 'categorical_crossentropy', 'Style_output': 'categorical_crossentropy', 'Objtype_output': 'categorical_crossentropy','CreationDate_output':'mean_squared_error'},
               optimizer=optimizer,
               loss_weights={'Artist_output':1,'Style_output':0.3,'Objtype_output':0.3,'CreationDate_output':0.3},
@@ -139,10 +153,10 @@ regular_rate=1e-4
 #              metrics={'Artist_output':'accuracy','Style_output':'accuracy','Objtype_output':'accuracy'})
 n_epoch=10
 history1=model.fit(train_generator,
-                  validation_data = valid_generator,
-                  epochs=n_epoch,
+                  validation_data = valid_generator,steps_per_epoch=len(train_frame)//batch_size,
+                  epochs=n_epoch,validation_steps=len(test_frame)//batch_size,
                   shuffle=True,
-                  verbose = 2,
+                  verbose = 1,
                   use_multiprocessing=True,
                   #callbacks=[red],
                   workers=16,)
@@ -204,8 +218,8 @@ model.compile(loss={'Artist_output': 'categorical_crossentropy', 'Style_output':
 #              metrics={'Artist_output':'accuracy','Style_output':'accuracy','Objtype_output':'accuracy'})
 n_epoch=5
 history2=model.fit(train_generator,
-                  validation_data = valid_generator,
-                  epochs=n_epoch,
+                  validation_data = valid_generator,steps_per_epoch=len(train_frame)//batch_size,
+                  epochs=n_epoch,validation_steps=len(test_frame)//batch_size,
                   shuffle=False,
                   verbose = 2,
                   use_multiprocessing=True,
