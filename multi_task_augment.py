@@ -1,9 +1,11 @@
+from utils import create_model
 import pandas as pd
 #drop unknow artist
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import cv2
 from generator import CustomDataGen
+from utils import create_model,generate_classdict
 
 mpl.rcParams['figure.figsize'] = (22, 20)
 pf=pd.read_csv('Preliminary_Training_Data_MoMA.csv')
@@ -50,7 +52,7 @@ import numpy as np
 path='./images/'
 train_input_shape = (224,224)
 batch_size=64
-imgs_size=(64,224,224,3
+imgs_size=(64,224,224,3)
 
 
 Artist_size=(batch_size,Artist_class_num)
@@ -79,38 +81,7 @@ valid_generator = tf.data.Dataset.from_generator(
      (imgs_size, {'Artist_output':Artist_size,'Style_output':Style_size,'Objtype_output':Objtype_size,'CreationDate_output':CreationDate_size}))
 #tf.TensorShape
 #Load pre-train model
-from tensorflow.keras.applications import *
-from tensorflow.keras.models import Sequential,Model
-from tensorflow.keras.layers import *
-from tensorflow.keras.optimizers import *
-from tensorflow.keras.callbacks import *
-from tensorflow.keras.initializers import *
-import tensorflow as tf
-import os
-train_input_shape=(224,224,3)
-based_model = ResNet50(weights='imagenet', include_top=False, input_shape=train_input_shape)
-for layer in based_model.layers:
-    layer.trainable = True
-# Add layers at the end
-X = based_model.output
-X = Flatten()(X)
-
-X = Dense(512, kernel_initializer='he_uniform')(X)
-X = Dropout(0.5)(X)
-X = BatchNormalization()(X)
-X = Activation('relu')(X)
-
-X = Dense(125, kernel_initializer='he_uniform')(X)
-X = Dropout(0.5)(X)
-X = BatchNormalization()(X)
-X = Activation('relu')(X)
-
-output1 = Dense(Artist_class_num, name='Artist_output',activation='softmax')(X)
-output2 = Dense(Style_class_num, activation='softmax',name='Style_output')(X)
-output3 = Dense(Objtype_class_num, activation='softmax',name='Objtype_output')(X)
-#model = Model(inputs=based_model.input, outputs=[output1,output2,output3])
-output4 = Dense(CreationDate_class_num, activation='sigmoid',name='CreationDate_output')(X)
-model = Model(inputs=based_model.input, outputs=[output1,output2,output3,output4])
+model = create_model()
 optimizer = Adam(learning_rate=1e-4)
 model.compile(loss={'Artist_output': 'categorical_crossentropy', 'Style_output': 'categorical_crossentropy', 'Objtype_output': 'categorical_crossentropy','CreationDate_output':'mean_squared_error'},
               optimizer=optimizer,
